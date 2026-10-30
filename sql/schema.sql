@@ -31,3 +31,7 @@ CREATE TABLE order_items (
     unit_price NUMERIC(10,2) NOT NULL CHECK (unit_price >= 0),
     PRIMARY KEY (order_id, product_id)
 );
+
+-- Indexes (see README performance report)
+CREATE INDEX idx_orders_customer_id ON orders (customer_id);
+CREATE INDEX idx_products_metadata ON products USING GIN (metadata);
