@@ -5,6 +5,7 @@ Data backend for a fictional online store. Orders are processed transactionally 
 ## Quick start
 
 ```bash
+git clone https://github.com/B-Pine/ecommerce-analytics.git && cd ecommerce-analytics
 docker compose up -d
 python -m venv .venv
 source .venv/bin/activate            # PowerShell: .venv\Scripts\Activate.ps1
@@ -90,30 +91,6 @@ erDiagram
 - `CHECK (stock_quantity >= 0)`: the database itself refuses to oversell.
 - `CHECK` on prices, quantities and allowed order statuses.
 - `ON DELETE CASCADE` on `order_items.order_id`: items are part of their order. Products use the default, so a product with sales history can't be deleted.
-
-## Design decisions
-
-### Transactional orders (`create_order`)
-
-The order, its items and every stock change happen in **one transaction**. If any item fails, everything rolls back, including stock already reserved for earlier items.
-
-Stock is reserved with a single conditional statement:
-
-```sql
-UPDATE products SET stock_quantity = stock_quantity - %s
-WHERE product_id = %s AND stock_quantity >= %s
-RETURNING price
-```
-
-Checking stock with a SELECT and then updating would allow a **race condition**: two simultaneous orders could both see the last item in stock. One UPDATE with the condition in its WHERE clause checks and reserves atomically, and `RETURNING price` captures the purchase price in the same step.
-
-### Top 10 products (Redis, cache-aside)
-
-`get_top_products` ranks products by units sold with `RANK()` (excluding cancelled orders), then caches the result in Redis for 10 minutes. Reads hit Redis first; on a miss, or if Redis is down, PostgreSQL is queried and the cache refilled. The list may be up to 10 minutes stale, which is acceptable for a best-sellers list.
-
-### Carts (MongoDB)
-
-A cart is a self-contained, frequently changing document that doesn't need foreign keys or multi-table transactions, so it lives in MongoDB, one document per browsing session. `checkout` turns the cart into an order in PostgreSQL and deletes the cart only after the order succeeds; a failed checkout keeps the cart. A **TTL index** on `updated_at` deletes carts 7 days after their last change.
 
 
 ## Performance report
